@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="de" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b0e14">
+<meta name="description" content="PDF-Bücher lesen – offline, mit Lesestand, Lesezeichen und Textmodus">
+<title>Reader</title>
+<script>
+/* Theme setzen, bevor das Stylesheet greift — sonst blitzt beim Start kurz das
+   Standard-Theme auf. Eigener, winziger Schlüssel: den kompletten Datensatz
+   hier zu parsen würde den Start bremsen. app.js hält ihn synchron. */
+(function () {
+  try {
+    var t = localStorage.getItem('reader.theme');
+    if (t) document.documentElement.dataset.theme = t;
+  } catch (e) { /* privater Modus o.ä. — dann bleibt es beim Standard */ }
+})();
+</script>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <h1 id="viewTitle">Bibliothek</h1>
+  <div class="top-actions" id="topActions"></div>
+</header>
+
+<main id="main">
+  <section class="view" id="view-library"></section>
+  <section class="view hidden" id="view-shelves"></section>
+  <section class="view hidden" id="view-stats"></section>
+  <section class="view hidden" id="view-settings"></section>
+</main>
+
+<nav class="tabbar">
+  <button data-nav="library" class="on">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-1 9H9V9h10v2zm-4 4H9v-2h6v2zm4-8H9V5h10v2z"/></svg>
+    <span>Bibliothek</span></button>
+  <button data-nav="shelves">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 10l-2.5-1.5L15 12V4h5v8z"/></svg>
+    <span>Regale</span></button>
+  <button id="btnImport" class="fab-tab" aria-label="PDF importieren">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg></button>
+  <button data-nav="stats">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M5 9.2h3V19H5zM10.6 5h2.8v14h-2.8zm5.6 8H19v6h-2.8z"/></svg>
+    <span>Statistik</span></button>
+  <button data-nav="settings">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 0 0 .12-.61l-1.92-3.32a.49.49 0 0 0-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.48.48 0 0 0-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96a.49.49 0 0 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58a.49.49 0 0 0-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6A3.6 3.6 0 1 1 12 8.4a3.6 3.6 0 0 1 0 7.2z"/></svg>
+    <span>Mehr</span></button>
+</nav>
+
+<!-- Leser: liegt über allem außer Sheet und Toast -->
+<section class="reader hidden" id="reader" data-paper="light" data-mode="page">
+  <div class="rd-stage" id="rdStage"></div>
+  <div class="rd-dim" id="rdDim"></div>
+
+  <header class="rd-top" id="rdTop">
+    <button class="rd-btn" data-act="rdClose" aria-label="Zurück zur Bibliothek">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg></button>
+    <div class="rd-titles">
+      <strong id="rdTitle"></strong>
+      <span id="rdChapter"></span>
+    </div>
+    <button class="rd-btn" data-act="rdMark" id="rdMarkBtn" aria-label="Lesezeichen setzen"></button>
+    <button class="rd-btn" data-act="rdToc" aria-label="Inhalt, Lesezeichen und Suche">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M3 13h2v-2H3v2zm0 4h2v-2H3v2zm0-8h2V7H3v2zm4 4h14v-2H7v2zm0 4h14v-2H7v2zM7 7v2h14V7H7z"/></svg></button>
+    <button class="rd-btn" data-act="rdLook" aria-label="Darstellung">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M9 4v3h5v12h3V7h5V4H9zm-6 8h3v7h3v-7h3V9H3v3z"/></svg></button>
+  </header>
+
+  <div class="rd-bottom" id="rdBottom">
+    <div class="rd-slider">
+      <input type="range" id="rdRange" min="1" max="1" value="1" aria-label="Seite wählen">
+      <output id="rdRangeOut" class="hidden"></output>
+    </div>
+    <div class="rd-bottom-row">
+      <button class="link" data-act="rdJump" id="rdPageBtn"></button>
+      <span class="rd-left" id="rdLeft"></span>
+    </div>
+  </div>
+
+  <footer class="rd-foot" id="rdFoot">
+    <span id="rdFootL"></span>
+    <span id="rdFootR" class="num"></span>
+  </footer>
+
+  <div class="rd-loading hidden" id="rdLoading"><div class="spinner"></div><span id="rdLoadingText">Öffne …</span></div>
+</section>
+
+<!-- Sheet: trägt alle Formulare und Dialoge -->
+<div class="scrim hidden" id="scrim"></div>
+<div class="sheet hidden" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
+  <div class="sheet-grip"></div>
+  <div class="sheet-head">
+    <button class="link" id="sheetCancel">Abbrechen</button>
+    <strong id="sheetTitle"></strong>
+    <button class="link strong" id="sheetSave">Sichern</button>
+  </div>
+  <div class="sheet-body" id="sheetBody"></div>
+</div>
+
+<div class="busy hidden" id="busy"><div class="spinner"></div><span id="busyText"></span></div>
+<div class="toast hidden" id="toast" role="status"></div>
+
+<!-- Dateiwähler, per .click() ausgelöst -->
+<input type="file" id="pdfInput" accept="application/pdf,.pdf" multiple class="hidden">
+<input type="file" id="backupInput" accept="application/json,.json" class="hidden">
+
+<script src="reflow.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
