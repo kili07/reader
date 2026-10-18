@@ -6,7 +6,7 @@
    - VENDOR  PDF.js (~6 MB). Ändert sich nur mit einer neuen PDF.js-Version
              und heißt deshalb nach ihr — so lädt nicht jedes App-Update die
              6 MB noch einmal herunter. */
-const CACHE = 'reader-v1';
+const CACHE = 'reader-v2';
 const VENDOR = 'reader-pdfjs-6.4.299';
 
 const ASSETS = [

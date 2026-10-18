@@ -17,7 +17,7 @@
 const KEY = 'reader.v1';
 /* Bei jeder Änderung hochzählen — wird in den Einstellungen angezeigt, damit
    sich auf dem Handy prüfen lässt, welche Fassung wirklich läuft. */
-const APP_VERSION = '1.0.0';
+const APP_VERSION = '1.0.1';
 
 const THEME_KEY = 'reader.theme';
 /* `bar` ist die Hintergrundfarbe des Themes und landet im
