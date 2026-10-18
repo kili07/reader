@@ -17,7 +17,7 @@
 const KEY = 'reader.v1';
 /* Bei jeder Änderung hochzählen — wird in den Einstellungen angezeigt, damit
    sich auf dem Handy prüfen lässt, welche Fassung wirklich läuft. */
-const APP_VERSION = '1.0.1';
+const APP_VERSION = '1.0.2';
 
 const THEME_KEY = 'reader.theme';
 /* `bar` ist die Hintergrundfarbe des Themes und landet im
@@ -283,6 +283,7 @@ const ICON = {
   del: 'M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z',
   download: 'M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z',
   upload: 'M9 16h6v-6h4l-7-7-7 7h4zm-4 2h14v2H5z',
+  install: 'M18 1.01 8 1c-1.1 0-2 .9-2 2v3h2V5h10v14H8v-1H6v3c0 1.1.9 2 2 2h10c1.1 0 2-.9 2-2V3c0-1.1-.9-1.99-2-1.99zM10 15h2V8H5v2h3.59L3 15.59 4.41 17 10 11.41V15z',
   chev: 'M10 6 8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z',
   close: 'M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z',
 };
@@ -1183,6 +1184,8 @@ function renderSettings() {
 
     <div class="sec-h">App</div>
     <div class="rows">
+      ${installEvt ? `<button class="set-row" data-act="install">${ic('install')}<span class="grow">App installieren
+        <span class="sub">Reader als eigene App auf den Startbildschirm legen</span></span></button>` : ''}
       <div class="set-row"><span class="grow">Version</span><span class="num muted">${APP_VERSION}</span></div>
       <button class="set-row" data-act="checkUpdate"><span class="grow">Nach Update suchen</span>${ic('chev')}</button>
       <button class="set-row" data-act="about"><span class="grow">Über diese App</span>${ic('chev')}</button>
@@ -1514,6 +1517,36 @@ async function checkUpdate() {
   } catch (e) { busy(null); toast('Keine Verbindung zum Server'); return; }
   busy(null);
   if (!(await applyIfNewer(true))) toast(`Du hast die neueste Version (${APP_VERSION})`);
+}
+
+/* ── Installieren ───────────────────────────────────────────────
+   Eigener Knopf statt Chrome-Menü: Chrome 154–157 meldet dort „bereits
+   installiert“, sobald irgendeine andere App auf derselben Domain installiert
+   ist (crbug.com/568841400, behoben ab Chrome 158). beforeinstallprompt prüft
+   pro App und ist nicht betroffen. Das Ereignis kommt nur, solange der Reader
+   wirklich installierbar ist — danach verschwindet der Knopf von selbst. */
+let installEvt = null;
+
+function wireInstall() {
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();             // Knopf in den Einstellungen statt Chromes eigener Leiste
+    installEvt = e;
+    if (view === 'settings') renderSettings();
+  });
+  window.addEventListener('appinstalled', () => {
+    installEvt = null;
+    if (view === 'settings') renderSettings();
+    toast('Reader ist installiert');
+  });
+}
+
+async function installApp() {
+  const e = installEvt;
+  if (!e) return;
+  installEvt = null;                // ein Ereignis lässt sich nur einmal auslösen
+  e.prompt();
+  await e.userChoice.catch(() => {});
+  if (view === 'settings') renderSettings();
 }
 
 /* ══ Leser ═════════════════════════════════════════════════════
@@ -3328,6 +3361,7 @@ const ACT = {
       fillStorageInfo();
     }),
   checkUpdate: checkUpdate,
+  install: installApp,
   about: () => infoSheet('Über Reader', `Version ${APP_VERSION}\n\n`
     + 'Reader zeigt PDF-Bücher offline an und merkt sich, wo Du warst. Alle Daten bleiben auf diesem Gerät – '
     + 'es gibt keinen Server und kein Konto.\n\n'
@@ -3512,3 +3546,4 @@ boot();
 if (navigator.storage && navigator.storage.persist) navigator.storage.persist();
 
 wireUpdates();
+wireInstall();
