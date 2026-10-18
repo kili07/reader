@@ -1,6 +1,5 @@
 {
-  "id": "/reader/v2",
-  "name": "Reader",
+  "name": "E-Reader",
   "short_name": "Reader",
   "description": "PDF-Bücher lesen – offline, mit Lesestand, Lesezeichen, Textmodus und Lesestatistik",
   "start_url": "./",
