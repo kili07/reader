@@ -78,9 +78,12 @@ self.addEventListener('install', (e) => {
 });
 
 self.addEventListener('activate', (e) => {
+  // Nur eigene alte Caches löschen: Alle Apps unter kili07.github.io teilen sich
+  // einen Cache-Speicher — ohne den Präfix-Filter flöge deren Offline-Fassung mit raus.
   e.waitUntil(
     caches.keys()
-      .then((keys) => Promise.all(keys.filter((k) => k !== CACHE && k !== VENDOR).map((k) => caches.delete(k))))
+      .then((keys) => Promise.all(keys.filter((k) => k.startsWith('reader-') && k !== CACHE && k !== VENDOR)
+        .map((k) => caches.delete(k))))
       .then(() => self.clients.claim())
   );
 });
