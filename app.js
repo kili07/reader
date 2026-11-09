@@ -17,7 +17,7 @@
 const KEY = 'reader.v1';
 /* Bei jeder Änderung hochzählen — wird in den Einstellungen angezeigt, damit
    sich auf dem Handy prüfen lässt, welche Fassung wirklich läuft. */
-const APP_VERSION = '1.0.2';
+const APP_VERSION = '1.0.3';
 
 const THEME_KEY = 'reader.theme';
 /* `bar` ist die Hintergrundfarbe des Themes und landet im
@@ -1309,9 +1309,8 @@ function askText(title, label, opts, onOk, back) {
 
    Der Druck schließt der Reihe nach, was offen ist — Sheet, Buch, Unterseite —
    und baut den Wächter danach wieder auf. Steht nichts mehr offen und Du bist
-   auf der Bibliothek, fragt ein Dialog nach. */
+   auf der Bibliothek, kommt ein Hinweis, der nächste Druck schließt die App (leaveHint). */
 let guardUp = false;
-let leaving = false;
 
 function pushGuard() {
   if (guardUp) return;
@@ -1322,14 +1321,19 @@ function pushGuard() {
 /** Vor allem, was die Zurück-Taste abfangen soll: Sheet öffnen, Seite wechseln, Buch öffnen. */
 function armBack() { pushGuard(); }
 
-/** „Verlassen" im Abschiedsdialog: der Dialog hat selbst einen Wächter
-    aufgebaut (jedes Sheet tut das). Erst ihn abräumen, dann führt der zweite
-    Schritt aus der App. Beides muss über zwei Runden laufen — history.back()
-    zweimal hintereinander fasst der Browser zu einem Schritt zusammen. */
-function leaveApp() {
-  closeSheet();
-  leaving = true;
-  history.back();
+/** Zurück auf der Übersicht: Hinweis statt Dialog. Ein „Verlassen"-Knopf
+    kann die installierte App nicht schließen: history.back() vom ersten
+    Verlaufseintrag aus tut nichts, window.close() blockt der Browser, sobald
+    der Verlauf mehr als einen Eintrag hat. Nur die System-Zurückgeste selbst
+    beendet die App. Deshalb bleibt der Wächter hier unten, und der nächste
+    Zurück-Druck schließt die App. Tippt man stattdessen in die App, steht der
+    Wächter wieder (Antippen zählt als Nutzeraktion; ohne sie überspringt
+    Chrome den Eintrag beim Zurückgehen). In der Dashboard-Vorschau nichts tun,
+    dann verkleinert das Dashboard die App. */
+function leaveHint(msg) {
+  if (window.__dashboard) return;
+  toast(msg || 'Zum Verlassen nochmal zurück wischen');
+  document.addEventListener('pointerdown', pushGuard, { once: true });
 }
 
 function wireBack() {
@@ -1337,24 +1341,13 @@ function wireBack() {
   window.addEventListener('popstate', () => {
     guardUp = false;
 
-    if (leaving) {
-      leaving = false;
-      history.back();
-      // Falls nichts mehr zum Zurückgehen da ist (im Browser-Tab, in dem die App
-      // der erste Eintrag ist), bleiben wir hier — dann fehlt der Wächter. Kein
-      // Timer zum Nachrüsten: ein pushState würde den laufenden Schritt abbrechen
-      // und genau das Verlassen verhindern. Also erst beim nächsten Antippen.
-      document.addEventListener('pointerdown', pushGuard, { once: true });
-      return;
-    }
     // Über den Abbrechen-Knopf, nicht über closeSheet: verschachtelte Sheets
     // haben dort ihren Rückweg zum vorherigen Sheet hinterlegt.
     if (sheetOpen()) { $('#sheetCancel').click(); pushGuard(); return; }
     if (R.open) { closeReader(); pushGuard(); return; }
     if (view !== 'library') { nav('library'); pushGuard(); return; }
 
-    askSheet('App verlassen?', 'Möchtest Du die App wirklich schließen?',
-      'Verlassen', leaveApp);
+    leaveHint();
   });
 }
 
