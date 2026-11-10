@@ -17,15 +17,15 @@
 const KEY = 'reader.v1';
 /* Bei jeder Änderung hochzählen — wird in den Einstellungen angezeigt, damit
    sich auf dem Handy prüfen lässt, welche Fassung wirklich läuft. */
-const APP_VERSION = '1.0.3';
+const APP_VERSION = '1.1.0';
 
 const THEME_KEY = 'reader.theme';
 /* `bar` ist die Hintergrundfarbe des Themes und landet im
    <meta name="theme-color">, damit die Systemleiste des Handys mitzieht —
    muss mit --bg in style.css übereinstimmen. */
 const THEMES = {
-  dark:  { label: 'Dunkel', bar: '#0b0e14' },
-  light: { label: 'Hell',   bar: '#f3f5f9' },
+  dark:  { label: 'Dunkel', bar: '#1B1714' },
+  light: { label: 'Hell',   bar: '#F3EDE3' },
 };
 /* Papier im Leser. `bar` wie oben, passend zu --pp-bg in style.css. */
 const PAPERS = {
@@ -49,7 +49,7 @@ const blank = () => ({
   books: [],          // Metadaten je Buch, siehe blankBook(); die PDF liegt in IndexedDB
   shelves: [],        // {id, name, created} — eigene Regale
   stats: {},          // 'JJJJ-MM-TT' → {s: Sekunden gelesen, p: Seiten gelesen}
-  theme: 'dark',      // App-Theme, Spiegel in THEME_KEY
+  theme: 'dark',      // App-Theme, Spiegel in THEME_KEY (dunkel: Holzregal bei Lampenlicht)
   read: {             // Lese-Einstellungen, gelten für alle Bücher
     paper: 'light',     // Papierfarbe: light | sepia | dark | black
     mode: 'page',       // Ansicht für neu geöffnete Bücher: page | scroll | text
@@ -67,7 +67,8 @@ const blank = () => ({
   lib: {              // Zustand der Bibliothek
     sort: 'recent',     // Schlüssel aus SORTS
     filter: 'all',      // all | reading | unread | done | shelf:<id>
-    layout: 'grid',     // grid | list
+    layout: 'shelf',    // shelf (Buchrücken im Regal) | grid | list
+    shelfSeen: false,   // einmal auf die Regalansicht umgestellt (Version 1.1)
   },
   tips: {},           // schon gezeigte Hinweise, z. B. {reader: true}
   lastBackup: null,   // ISO-Zeitpunkt des letzten Backups
@@ -140,7 +141,10 @@ function normalize(src) {
   });
 
   if (!SORTS[d.lib.sort]) d.lib.sort = 'recent';
-  if (!['grid', 'list'].includes(d.lib.layout)) d.lib.layout = 'grid';
+  if (!['shelf', 'grid', 'list'].includes(d.lib.layout)) d.lib.layout = 'shelf';
+  // Mit 1.1 kam das Regal mit Buchrücken. Einmal dorthin umstellen, danach
+  // gilt wieder, was Du wählst.
+  if (!d.lib.shelfSeen) { d.lib.layout = 'shelf'; d.lib.shelfSeen = true; }
   if (typeof d.lib.filter !== 'string') d.lib.filter = 'all';
   if (d.lib.filter.startsWith('shelf:') && !shelfIds.has(d.lib.filter.slice(6))) d.lib.filter = 'all';
   return d;
@@ -641,7 +645,7 @@ function renderTop() {
     a.innerHTML = `
       <button class="icon-btn${libSearchOpen ? ' on' : ''}" data-act="libSearch" aria-label="Suchen">${ic('search')}</button>
       <button class="icon-btn" data-act="libSort" aria-label="Sortieren">${ic('sort')}</button>
-      <button class="icon-btn" data-act="libLayout" aria-label="${db.lib.layout === 'grid' ? 'Als Liste zeigen' : 'Als Raster zeigen'}">${ic(db.lib.layout === 'grid' ? 'list' : 'grid')}</button>`;
+      <button class="icon-btn" data-act="libLayout" aria-label="${LAYOUT_NEXT[db.lib.layout][1]}">${ic(LAYOUT_NEXT[db.lib.layout][2])}</button>`;
   } else if (view === 'shelves' && db.shelves.length) {
     a.innerHTML = `<button class="icon-btn" data-act="shelfNew" aria-label="Neues Regal">${ic('add')}</button>`;
   } else {
@@ -697,6 +701,7 @@ function libListHTML() {
   if (cont) h += heroHTML(cont);
   h += chipsHTML();
   if (!list.length) h += `<div class="empty"><p>${q ? 'Kein Buch passt zur Suche.' : 'In dieser Auswahl liegt noch kein Buch.'}</p></div>`;
+  else if (db.lib.layout === 'shelf') h += shelvesHTML(list);
   else h += `<div class="${db.lib.layout === 'grid' ? 'grid' : 'list'}">${list.map(bookCard).join('')}</div>`;
   return h;
 }
@@ -715,14 +720,51 @@ function continueBook() {
 
 function heroHTML(b) {
   const p = progress(b);
-  return `<button class="hero" data-act="open" data-id="${esc(b.id)}">
-    <div class="bk-cover">${coverHTML(b)}</div>
-    <div class="grow">
-      <div class="k">Weiterlesen</div>
-      <div class="t">${esc(b.title)}</div>
-      <div class="s">Seite ${b.pos.page} von ${b.pages} · ${nf0.format(p * 100)} %</div>
-      <div class="meter"><i style="width:${(p * 100).toFixed(1)}%"></i></div>
-    </div></button>`;
+  return `<div class="hero">
+    <div class="k">Weiterlesen</div>
+    <div class="t">${esc(b.title)}</div>
+    ${b.author ? `<div class="a">${esc(b.author)}</div>` : ''}
+    <div class="meter" role="img" aria-label="${nf0.format(p * 100)} Prozent gelesen"><i style="width:${(p * 100).toFixed(1)}%"></i></div>
+    <div class="s"><span>Seite ${b.pos.page} von ${b.pages}</span><span>${nf0.format(p * 100)} %</span></div>
+    <button class="btn btn-primary btn-block" data-act="open" data-id="${esc(b.id)}">Aufschlagen</button>
+  </div>`;
+}
+
+/* Layout der Bibliothek: was der Knopf oben als Nächstes zeigt
+   [nächstes Layout, Beschriftung, Symbol] */
+const LAYOUT_NEXT = {
+  shelf: ['grid', 'Als Raster zeigen', 'grid'],
+  grid: ['list', 'Als Liste zeigen', 'list'],
+  list: ['shelf', 'Als Regal zeigen', 'shelf'],
+};
+
+/* Regal: jedes Buch ein Buchrücken. Dicke aus der Seitenzahl, Höhe und
+   Farbe fest aus dem Titel, damit ein Buch immer gleich aussieht. Die
+   Reihen werden hier umbrochen (nicht per CSS), damit jedes Brett unter
+   einer ganzen Reihe liegt. Langes Drücken öffnet wie sonst die Details. */
+const SHELF_W = 320;        // Platz je Brett in px; schmalste Handybreite minus Rand
+function spineHTML(b) {
+  const miss = filesReady && !files.has(b.id);
+  const w = spineWidth(b);
+  const h = 150 + (strHash(b.title + '|h') % 56);
+  const state = miss ? 'PDF fehlt' : b.finished ? 'gelesen' : b.lastRead ? nf0.format(progress(b) * 100) + ' % gelesen' : 'neu';
+  return `<div class="bk spine${miss ? ' missing' : ''}${b.finished ? ' done' : ''}" role="button" tabindex="0" data-act="open" data-id="${esc(b.id)}"
+    data-c="${strHash(b.title) % 6}" style="width:${w}px;height:${h}px" aria-label="${esc(b.title)}${b.author ? ', ' + esc(b.author) : ''}, ${state}">
+    <span class="spine-t">${esc(b.title)}</span></div>`;
+}
+function spineWidth(b) {
+  return Math.max(34, Math.min(64, 30 + Math.round(Math.sqrt(b.pages || 100) * 1.2)));
+}
+function shelvesHTML(list) {
+  const rows = [[]];
+  let used = 0;
+  for (const b of list) {
+    const w = spineWidth(b) + 3;
+    if (used + w > SHELF_W && rows[rows.length - 1].length) { rows.push([]); used = 0; }
+    rows[rows.length - 1].push(b); used += w;
+  }
+  return `<div class="shelves">${rows.map((r) => `<div class="shelf-row">${r.map(spineHTML).join('')}</div>`).join('')}</div>
+    <p class="shelf-hint">Antippen schlägt auf, lange drücken zeigt die Details.</p>`;
 }
 
 function bookCard(b) {
@@ -3295,7 +3337,7 @@ const ACT = {
   },
   libSort: openSortSheet,
   libSortSet: (el) => { db.lib.sort = el.dataset.v; save(); closeSheet(); render(); },
-  libLayout: () => { db.lib.layout = db.lib.layout === 'grid' ? 'list' : 'grid'; save(); render(); },
+  libLayout: () => { db.lib.layout = LAYOUT_NEXT[db.lib.layout][0]; save(); render(); },
   libFilter: (el) => { db.lib.filter = el.dataset.f; save(); renderLibList(); },
   hintLater: () => { db.tips.backupSnooze = new Date().toISOString(); save(); render(); },
 
